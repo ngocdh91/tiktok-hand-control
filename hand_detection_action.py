@@ -173,7 +173,7 @@ while cap.isOpened():
         prev_action = None  # If no hand detected, stop all actions
 
     # Display frame
-    # cv2.imshow("Hand Gesture Control", frame)
+    cv2.imshow("Hand Gesture Control", frame)
 
     if cv2.waitKey(1) & 0xFF == ord('q'):
         break

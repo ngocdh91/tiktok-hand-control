@@ -39,7 +39,7 @@ pip install pyautogui
 
 Watch the project in action:
 
-[![Hand Gesture Control Demo](https://img.youtube.com/vi/TbRj-IEGmFo/0.jpg)](https://youtu.be/TbRj-IEGmFo)
+[![Hand Gesture Control Demo](https://img.youtube.com/vi/rlXAZewexms/0.jpg)](https://youtu.be/rlXAZewexms)
 
 *Click the image above to watch the demo on YouTube*
 
