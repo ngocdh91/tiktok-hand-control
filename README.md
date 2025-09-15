@@ -35,6 +35,14 @@ pip install mediapipe
 pip install pyautogui
 ```
 
+## 🎥 Video Demo
+
+Watch the project in action:
+
+[![Hand Gesture Control Demo](https://img.youtube.com/vi/TbRj-IEGmFo/0.jpg)](https://youtu.be/TbRj-IEGmFo)
+
+*Click the image above to watch the demo on YouTube*
+
 ## 🚀 Usage
 
 ### Run the Program
