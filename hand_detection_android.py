@@ -1,6 +1,6 @@
 import cv2
 import mediapipe as mp
-import pyautogui
+import uiautomator2 as u2
 import time
 
 # Initialize MediaPipe Hands
@@ -8,10 +8,20 @@ mp_hands = mp.solutions.hands
 mp_drawing = mp.solutions.drawing_utils
 hands = mp_hands.Hands(min_detection_confidence=0.7, min_tracking_confidence=0.7)
 
+# Initialize uiautomator2 device connection
+# You can connect via ADB or IP address
+# For ADB: u2.connect() or u2.connect('device_id')
+# For IP: u2.connect('192.168.1.100:5555')
+try:
+    device = u2.connect()  # Connect to the first available device
+    print("Connected to Android device successfully")
+except Exception as e:
+    print(f"Failed to connect to Android device: {e}")
+    print("Make sure your Android device is connected via ADB and USB debugging is enabled")
+    exit(1)
 
 # Configure webcam
 cap = cv2.VideoCapture(0)
-screen_width, screen_height = pyautogui.size()
 
 prev_x, prev_y = None, None
 prev_action = None
@@ -22,6 +32,12 @@ gesture_start_y = None  # Initial Y position when gesture starts
 gesture_start_time = None  # Initial time when gesture starts
 gesture_threshold = 0.02  # Minimum movement threshold
 gesture_time_threshold = 0.1  # Minimum time to recognize gesture
+
+# Get device screen dimensions for better scroll control
+device_info = device.info
+screen_width = device_info['displayWidth']
+screen_height = device_info['displayHeight']
+print(f"Device screen size: {screen_width}x{screen_height}")
 
 while cap.isOpened():
     ret, frame = cap.read()
@@ -110,17 +126,17 @@ while cap.isOpened():
                         # Only recognize gesture after moving far enough and long enough
                         if abs(delta_y_from_start) > gesture_threshold and time_elapsed > gesture_time_threshold:
                             if delta_y_from_start < -gesture_threshold:  # Move up from initial position
-                                current_action = "page_down"
+                                current_action = "scroll_down"
                             elif delta_y_from_start > gesture_threshold:  # Move down from initial position
-                                current_action = "page_up"
+                                current_action = "scroll_up"
                         else:
                             current_action = None
                     
                     # Check horizontal swipe (still use immediate delta)
                     if prev_x is not None:
                         delta_x = x - prev_x
-                        if delta_x > 0.015:  # Swipe right → page down
-                            current_action = "page_down"
+                        if delta_x > 0.015:  # Swipe right → scroll down
+                            current_action = "scroll_down"
                     
                     # Display debug information
                     if gesture_start_y is not None:
@@ -148,16 +164,24 @@ while cap.isOpened():
                     current_action != last_gesture_state and 
                     (current_time - last_action_time) > action_cooldown):
                     
-                    if current_action == "page_down":
-                        # pyautogui.press('pagedown')
-                        pyautogui.scroll(-200)
-                        cv2.putText(frame, "Page Down + Scroll -200", (50, 150), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 165, 0), 3)
-                        last_action_time = current_time
-                    elif current_action == "page_up":
-                        # pyautogui.press('pageup')
-                        pyautogui.scroll(200)
-                        cv2.putText(frame, "Page Up + Scroll 200", (50, 150), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 255), 3)
-                        last_action_time = current_time
+                    try:
+                        if current_action == "scroll_down":
+                            # Scroll down on Android device - increased swipe distance for smoother action
+                            device.swipe(screen_width // 2, screen_height * 0.8, 
+                                       screen_width // 2, screen_height * 0.2, 
+                                       duration=0.05)
+                            cv2.putText(frame, "Scroll Down", (50, 150), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 165, 0), 3)
+                            last_action_time = current_time
+                        elif current_action == "scroll_up":
+                            # Scroll up on Android device - increased swipe distance for smoother action
+                            device.swipe(screen_width // 2, screen_height * 0.2, 
+                                       screen_width // 2, screen_height * 0.8, 
+                                       duration=0.05)
+                            cv2.putText(frame, "Scroll Up", (50, 150), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 255), 3)
+                            last_action_time = current_time
+                    except Exception as e:
+                        print(f"Error executing scroll action: {e}")
+                        cv2.putText(frame, f"Error: {str(e)[:30]}...", (50, 150), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
                 
                 # Update gesture state
                 last_gesture_state = current_action
@@ -174,7 +198,7 @@ while cap.isOpened():
         prev_action = None  # If no hand detected, stop all actions
 
     # Display frame
-    # cv2.imshow("Hand Gesture Control", frame)
+    cv2.imshow("Hand Gesture Control - Android", frame)
 
     if cv2.waitKey(1) & 0xFF == ord('q'):
         break
