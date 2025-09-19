@@ -97,34 +97,47 @@ def restore_sleep():
     # For macOS and Linux, the subprocess will automatically terminate
     # when the main process exits, so no explicit cleanup needed
 
-# Function to show large text without blocking main loop
+# Global variables for text display
+text_display = None
+text_start_time = 0
+text_duration = 0
+
 def show_large_text(frame, text, duration=2000):
-    """Show large text in center of frame without blocking main loop"""
-    # Create a copy of the frame
-    display_frame = frame.copy()
+    """Show large text on frame for a specific duration without blocking"""
+    global text_display, text_start_time, text_duration
     
-    # Calculate center position
-    center_x = display_frame.shape[1] // 2
-    center_y = display_frame.shape[0] // 2
+    # Set text to display
+    text_display = text
+    text_start_time = time.time()
+    text_duration = duration / 1000.0  # Convert ms to seconds
     
-    # Calculate text size for centering
-    font_scale = 2
-    thickness = 4
-    (text_width, text_height), _ = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, font_scale, thickness)
+    # Draw text on current frame
+    draw_text_on_frame(frame)
+
+def draw_text_on_frame(frame):
+    """Draw the current text on frame if it should be displayed"""
+    global text_display, text_start_time, text_duration
     
-    # Center the text
-    text_x = center_x - text_width // 2
-    text_y = center_y + text_height // 2
-    
-    # Draw the text
-    cv2.putText(display_frame, text, (text_x, text_y), 
-               cv2.FONT_HERSHEY_SIMPLEX, font_scale, (0, 0, 255), thickness)
-    
-    # Show the frame
-    cv2.imshow("Hand Gesture Control - Android", display_frame)
-    cv2.waitKey(duration)
-    
-    return display_frame
+    if text_display and (time.time() - text_start_time) < text_duration:
+        # Calculate center position
+        center_x = frame.shape[1] // 2
+        center_y = frame.shape[0] // 2
+        
+        # Calculate text size for centering
+        font_scale = 2
+        thickness = 4
+        (text_width, text_height), _ = cv2.getTextSize(text_display, cv2.FONT_HERSHEY_SIMPLEX, font_scale, thickness)
+        
+        # Center the text
+        text_x = center_x - text_width // 2
+        text_y = center_y + text_height // 2
+        
+        # Draw the text
+        cv2.putText(frame, text_display, (text_x, text_y), 
+                   cv2.FONT_HERSHEY_SIMPLEX, font_scale, (0, 0, 255), thickness)
+    elif text_display and (time.time() - text_start_time) >= text_duration:
+        # Clear text when duration is over
+        text_display = None
 
 # Function to handle TikTok operations in background
 def handle_tiktok_operation(operation, frame):
@@ -468,6 +481,9 @@ while cap.isOpened():
     else:
         prev_action = None  # If no hand detected, stop all actions
 
+    # Draw any pending text on frame
+    draw_text_on_frame(frame)
+    
     # Display frame
     cv2.imshow("Hand Gesture Control - Android", frame)
 

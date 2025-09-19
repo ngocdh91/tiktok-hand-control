@@ -150,12 +150,12 @@ while cap.isOpened():
                     
                     if current_action == "page_down":
                         # pyautogui.press('pagedown')
-                        pyautogui.scroll(-200)
+                        pyautogui.scroll(-20)
                         cv2.putText(frame, "Page Down + Scroll -200", (50, 150), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 165, 0), 3)
                         last_action_time = current_time
                     elif current_action == "page_up":
                         # pyautogui.press('pageup')
-                        pyautogui.scroll(200)
+                        pyautogui.scroll(20)
                         cv2.putText(frame, "Page Up + Scroll 200", (50, 150), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 255), 3)
                         last_action_time = current_time
                 
