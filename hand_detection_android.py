@@ -6,6 +6,7 @@ import subprocess
 import threading
 import platform
 import ctypes
+import math
 
 # Initialize MediaPipe Hands
 mp_hands = mp.solutions.hands
@@ -345,7 +346,90 @@ while cap.isOpened():
                 middle_extended = fingers["middle"].y < landmarks[mp_hands.HandLandmark.MIDDLE_FINGER_DIP].y
                 ring_folded = is_finger_folded(fingers["ring"], landmarks[mp_hands.HandLandmark.RING_FINGER_DIP])
                 pinky_folded = is_finger_folded(fingers["pinky"], landmarks[mp_hands.HandLandmark.PINKY_DIP])
+
+                # Always show finger states
+                cv2.putText(frame, f"Thumb: {'Extended' if not thumb_folded else 'Folded'}", (50, 260), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)
+                cv2.putText(frame, f"Index: {'Extended' if index_extended else 'Folded'}", (50, 290), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)
+                cv2.putText(frame, f"Middle: {'Extended' if middle_extended else 'Folded'}", (50, 320), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)
+                cv2.putText(frame, f"Ring: {'Folded' if ring_folded else 'Extended'}", (50, 350), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)
+                cv2.putText(frame, f"Pinky: {'Folded' if pinky_folded else 'Extended'}", (50, 380), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)
                 
+                # Right-hand cross gesture (index and thumb crossed): tuned per provided keypoints
+                # - 3 fingers (middle/ring/pinky) folded
+                # - Thumb roughly horizontal (tip-ip x distance large, y distance small)
+                # - Index extended
+                # - Thumb-Index tips very close together (crossing contact)
+                # - Index tip is above thumb tip (index over thumb)
+                # - Wrist->index and wrist->thumb lengths similar (overlap region)
+                thumb_tip = landmarks[mp_hands.HandLandmark.THUMB_TIP]
+                thumb_ip = landmarks[mp_hands.HandLandmark.THUMB_IP]
+                index_tip = landmarks[mp_hands.HandLandmark.INDEX_FINGER_TIP]
+                wrist_pt = landmarks[mp_hands.HandLandmark.WRIST]
+
+                # Show distance between thumb tip and index tip (normalized 0-1)
+                dx_ti = thumb_tip.x - index_tip.x
+                dy_ti = thumb_tip.y - index_tip.y
+                dist_ti = math.hypot(dx_ti, dy_ti)
+                cv2.putText(frame, f"Thumb-Index Dist: {dist_ti:.3f}", (50, 410),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
+
+                # Determine states for heart gesture
+                # Thumb horizontal to either side
+                thumb_horizontal = (abs(thumb_tip.y - thumb_ip.y) < 0.07 and abs(thumb_tip.x - thumb_ip.x) > 0.03)
+                middle_folded = not middle_extended
+                three_folded = (middle_folded and ring_folded and pinky_folded)
+
+                # Compute angle between vectors wrist->index and wrist->thumb
+                v_ix = index_tip.x - wrist_pt.x
+                v_iy = index_tip.y - wrist_pt.y
+                v_tx = thumb_tip.x - wrist_pt.x
+                v_ty = thumb_tip.y - wrist_pt.y
+                dot = v_ix * v_tx + v_iy * v_ty
+                norm_i = math.hypot(v_ix, v_iy)
+                norm_t = math.hypot(v_tx, v_ty)
+                angle_ok = False
+                angle_deg = None
+                if norm_i > 1e-6 and norm_t > 1e-6:
+                    # Log lengths of wrist->index and wrist->thumb vectors
+                    print(f"norm_i={norm_i:.4f}, norm_t={norm_t:.4f}")
+                    cosang = max(-1.0, min(1.0, dot / (norm_i * norm_t)))
+                    angle_deg = math.degrees(math.acos(cosang))
+                    # Angle not strictly required for crossing; allow wide range
+                    angle_ok = 5 <= angle_deg <= 100
+                    # Display angle between index and thumb (degrees)
+                    cv2.putText(frame, f"Thumb-Index Angle: {angle_deg:.1f} deg", (50, 440),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 200, 0), 2)
+
+                # Distance between tips should be very small (crossing contact)
+                tips_dx = thumb_tip.x - index_tip.x
+                tips_dy = thumb_tip.y - index_tip.y
+                tips_dist = math.hypot(tips_dx, tips_dy)
+                # Log distance between thumb and index tips
+                print(f"tips_dist={tips_dist:.4f}")
+                dist_ok = tips_dist < 0.2
+
+                # Index above thumb (visual crossing with index on top)
+                index_above_thumb = index_tip.y < (thumb_tip.y - 0.005)
+
+                # Similar reach length from wrist to tips (so they overlap spatially)
+                len_i = norm_i
+                len_t = norm_t
+                length_similar = abs(len_i - len_t) < 0.12
+
+                right_hand_heart_gesture = (
+                    index_extended and three_folded and thumb_horizontal and
+                    dist_ok and index_above_thumb and length_similar and angle_ok
+                )
+
+                # Debug print all conditions used for right_hand_heart_gesture
+                print(
+                    f"[heart] index_ext={index_extended} three_folded={three_folded} "
+                    f"thumb_horizontal={thumb_horizontal} tips_dist={tips_dist:.3f} dist_ok={dist_ok} "
+                    f"index_above_thumb={index_above_thumb} len_i={norm_i:.3f} len_t={norm_t:.3f} "
+                    f"length_similar={length_similar} angle={('NA' if angle_deg is None else f'{angle_deg:.1f}')} angle_ok={angle_ok}"
+                )
+             
+
                 # Check OK gesture (thumb and index finger forming a circle)
                 def is_ok_gesture():
                     # Calculate distance between thumb tip and index tip
@@ -370,6 +454,21 @@ while cap.isOpened():
                 current_time = time.time()
                 in_cooldown = (current_time - last_action_time) < action_cooldown
                 
+                # Handle right-hand heart gesture to like (double tap center), only when TikTok is open
+                if (right_hand_heart_gesture and not in_cooldown and ok_gesture_used and not tiktok_closed_by_gesture):
+                    try:
+                        center_x = screen_width // 2
+                        center_y = screen_height // 2
+                        # Double tap in center
+                        device.click(center_x, center_y)
+                        time.sleep(0.1)
+                        device.click(center_x, center_y)
+                        show_large_text(frame, "LIKED! ❤", 1200)
+                        last_action_time = current_time
+                        last_gesture_state = "like"
+                    except Exception as e:
+                        print(f"Failed to like via heart gesture: {e}")
+
                 # Handle OK gesture to open TikTok (can be used multiple times after TikTok is closed)
                 if ok_gesture and not ok_gesture_used:
                     print("OK gesture detected - Opening TikTok...")
