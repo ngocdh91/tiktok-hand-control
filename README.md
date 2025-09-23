@@ -1,146 +1,109 @@
-# Hand Gesture Control for TikTok/Douyin
+# Hand Gesture Control for Android (TikTok)
 
-## 🎯 Purpose
-This project uses hand gestures to control TikTok/Douyin scrolling in a natural and convenient way. Instead of touching the screen, you can use hand gestures to scroll through videos.
+Control the TikTok app on an Android device using hand gestures detected from your webcam.
 
-## ✨ Key Features
+## Dependencies
 
-### 🖐️ Supported Hand Gestures
-- **Index + Middle fingers extended**: Activate control mode
-- **Ring + Pinky fingers folded**: Complete gesture
-- **Ignore thumb**: Flexible hand position
+Install Python packages:
 
-### 📱 Control Actions
-- **Swipe up**: Scroll down (Page Down + Scroll -200)
-- **Swipe down**: Scroll up (Scroll 200) 
-- **Swipe right**: Scroll down (Page Down + Scroll -200)
-
-### 🎮 Technical Features
-- **Right hand only**: Avoid conflicts with left hand
-- **Initial position tracking**: Accurate direction detection from starting point
-- **0.3s cooldown**: Prevent action spam, smooth scrolling
-- **High sensitivity**: Quick response to small gestures
-
-## 🛠️ Installation
-
-### System Requirements
-- Python 3.7+
-- macOS (for pyautogui)
-- Webcam
-
-### Install Dependencies
 ```bash
-pip install opencv-python
-pip install mediapipe
-pip install pyautogui
+pip install -r requirements_android.txt
 ```
 
-## 🎥 Video Demo
+Contents of `requirements_android.txt`:
 
-Watch the project in action:
+- opencv-python
+- mediapipe
+- uiautomator2
 
-[![Hand Gesture Control Demo](https://img.youtube.com/vi/rlXAZewexms/0.jpg)](https://youtu.be/rlXAZewexms)
+Other standard libraries used by the script: `threading`, `subprocess`, `platform`, `ctypes`, `math`, `time` (không cần cài thêm).
 
-*Click the image above to watch the demo on YouTube*
+## Android setup
 
-## 🚀 Usage
+1) Bật Developer Options và USB debugging trên máy Android.
+2) Kết nối thiết bị với máy tính qua USB (hoặc Wi‑Fi ADB).
+3) Cài uiautomator2 vào thiết bị:
 
-### Run the Program
 ```bash
-python hand_detection_action.py
+python -m uiautomator2 init
 ```
 
-### How to Use
-1. **Open TikTok/Douyin** in your browser
-2. **Run the program** - camera window will appear
-3. **Place your right hand** in the frame
-4. **Extend index + middle fingers**, fold ring + pinky fingers
-5. **Swipe your hand** in the desired direction:
-   - Swipe up/right → Scroll to next video
-   - Swipe down → Scroll to previous video
+4) Kiểm tra kết nối:
 
-### Exit Program
-- Press `q` key in the camera window
-
-## 📊 Debug Information
-
-The program displays debug information on screen:
-- **Hand: Right/Left**: Detected hand type
-- **Start Y**: Initial Y position when gesture starts
-- **Current Y**: Current Y position
-- **Delta**: Movement distance from initial position
-- **Time**: Elapsed time
-
-## ⚙️ Customization
-
-### Adjust Sensitivity
-```python
-gesture_threshold = 0.02  # Minimum movement threshold (decrease = more sensitive)
-gesture_time_threshold = 0.1  # Minimum time to recognize gesture
-action_cooldown = 0.3  # Delay between actions (seconds)
+```bash
+python -c "import uiautomator2 as u2; print(u2.connect().info)"
 ```
 
-### Adjust Scroll
-```python
-pyautogui.scroll(-200)  # Scroll down 200 pixels
-pyautogui.scroll(200)   # Scroll up 200 pixels
+Tùy chọn Wi‑Fi ADB:
+
+```bash
+adb tcpip 5555
+adb connect <device_ip>:5555
 ```
 
-## 🎯 Applications
+## Run
 
-### Perfect for
-- **TikTok/Douyin scrolling** without touching screen
-- **Remote control** when hands are dirty or wet
-- **Hands-free experience** while watching videos
-- **For lazy people** - minimal hand movement required
+```bash
+python hand_detection_android.py
+```
 
-### Compatibility
-- ✅ TikTok (tiktok.com)
-- ✅ Douyin (douyin.com) 
-- ✅ YouTube (youtube.com)
-- ✅ Any website that supports scrolling
+Sau khi chạy, cửa sổ camera sẽ hiển thị. Script tự kết nối thiết bị Android đầu tiên qua ADB (`u2.connect()`).
 
-## 🔧 Code Structure
+## Gestures (từ mã nguồn `hand_detection_android.py`)
 
-### Main Components
-- **MediaPipe Hands**: Hand detection and tracking
-- **OpenCV**: Video processing and display
-- **PyAutoGUI**: Mouse and keyboard control
-- **Gesture Recognition**: Gesture detection logic
+- Right hand only: Bỏ qua tay trái với gestures thông thường.
+- Smart cooldown: `action_cooldown = 0.5s` để tránh spam hành động.
+- Anti‑sleep đa nền tảng được bật khi khởi động; tự phục hồi khi thoát.
 
-### Workflow
-1. **Capture video** from webcam
-2. **Detect hands** using MediaPipe
-3. **Identify hand type** (left/right)
-4. **Track position** and time
-5. **Recognize gestures** based on movement
-6. **Execute corresponding actions**
+### Mở TikTok (OK gesture)
 
-## 🐛 Troubleshooting
+- Ngón cái và ngón trỏ chạm nhau (tạo vòng) và 3 ngón còn lại duỗi.
+- Khi detect, chạy `device.app_start("com.ss.android.ugc.trill")` (hiển thị overlay “TIKTOK OPENED!”).
+- Có thể dùng nhiều lần sau khi đã đóng TikTok bằng gesture khác.
 
-### Common Issues
-- **Hand not detected**: Ensure good lighting, hand in frame
-- **Inaccurate gestures**: Adjust `gesture_threshold`
-- **Action spam**: Increase `action_cooldown`
-- **Up/down confusion**: Ensure tracking from initial position
+### Đóng TikTok (Cross arms X)
 
-### Debug
-- Enable debug display to see tracking information
-- Check console for errors
-- Adjust sensitivity based on environment
+- Cả hai tay cùng xuất hiện, hai ngón trỏ duỗi, cổ tay chéo nhau và cao độ tương tự.
+- Khi detect, chạy `device.app_stop("com.ss.android.ugc.trill")` (overlay “TIKTOK CLOSED!”). Không thoát script.
 
-## 📝 License
+### Scroll video (Index + Middle extended)
 
-MIT License - Free to use for personal and commercial purposes.
+- Kích hoạt khi ngón trỏ và ngón giữa duỗi, còn lại gập.
+- Dựa vào dịch chuyển so với vị trí ban đầu và/hoặc vuốt ngang:
+  - Lên từ vị trí ban đầu → scroll down.
+  - Xuống từ vị trí ban đầu → scroll up.
+  - Vuốt phải (delta_x > 0.02) → scroll down.
+  - Vuốt trái (delta_x < -0.05) → scroll up.
+- Thao tác trên Android bằng `device.swipe(...)` với khoảng cách ~60% chiều cao màn hình, `duration=0.05` (rất nhanh).
 
-## 🤝 Contributing
+### Like video (Index và Thumb đan chéo – tùy chọn)
 
-All contributions are welcome! Please create issues or pull requests.
+- Chỉ hoạt động khi TikTok đang mở và không trong cooldown.
+- Điều kiện chính (được tinh chỉnh theo code):
+  - 3 ngón (middle/ring/pinky) gập; `index_extended = True`.
+  - `thumb_horizontal` ~ ngang; góc ngón cái `thumb_dir_angle` trong khoảng `[-60°, -10°]`.
+  - Hai đầu ngón trỏ–cái gần nhau: `tips_dist < 0.15` (tọa độ chuẩn hóa 0–1).
+  - Ngón trỏ nằm trên ngón cái: `index_tip.y < thumb_tip.y - 0.005`.
+  - Độ dài wrist→index và wrist→thumb gần nhau: `|norm_i - norm_t| < 0.12`.
+  - Góc giữa hướng wrist→index và wrist→thumb trong `15°..100°`.
+- Khi thỏa, script double‑tap giữa màn hình bằng `device.click` 2 lần (thay cho bấm nút like).
 
-## 📞 Contact
+## Tùy chỉnh nhanh
 
-If you have issues or suggestions, please create an issue on GitHub.
+- Cooldown: `action_cooldown = 0.5`
+- Ngưỡng chuyển động dọc: `gesture_threshold = 0.02`
+- Thời gian giữ: `gesture_time_threshold = 0.2`
+- Tốc độ vuốt: `duration=0.05` trong `device.swipe`
+- Package TikTok: `com.ss.android.ugc.trill`
 
----
+## Troubleshooting
 
-**Enjoy your hands-free TikTok/Douyin experience! 🎉**
+- `adb devices` phải hiển thị thiết bị ở trạng thái `device`.
+- Nếu không mở/đóng được app, kiểm tra đúng package name.
+- Ánh sáng yếu làm giảm độ chính xác MediaPipe – tăng sáng và đưa tay gần camera.
+- Nếu khung hình giật khi hiển thị chữ lớn, script đã tối ưu bằng overlay không chặn; đảm bảo CPU/GPU không quá tải.
+
+## Notes
+
+- Nhấn `q` để thoát.
+- Khi thoát, script sẽ khôi phục chế độ sleep và gọi `app_stop` để đóng TikTok.

@@ -366,6 +366,34 @@ while cap.isOpened():
                 index_tip = landmarks[mp_hands.HandLandmark.INDEX_FINGER_TIP]
                 wrist_pt = landmarks[mp_hands.HandLandmark.WRIST]
 
+                # Compute index finger direction using vector TIP - PIP
+                index_pip_joint = landmarks[mp_hands.HandLandmark.INDEX_FINGER_PIP]
+                dir_ix = index_tip.x - index_pip_joint.x
+                dir_iy = index_tip.y - index_pip_joint.y
+                index_dir_angle = math.degrees(math.atan2(dir_iy, dir_ix))  # deg, y axis downward
+                # Map angle to a coarse direction label
+                def classify_angle_deg(angle_deg: float) -> str:
+                    if abs(angle_deg) <= 25:
+                        return "right"
+                    if abs(abs(angle_deg) - 180) <= 25:
+                        return "left"
+                    if -115 <= angle_deg <= -65:
+                        return "up"
+                    if 65 <= angle_deg <= 115:
+                        return "down"
+                    return "diagonal"
+                index_dir_label = classify_angle_deg(index_dir_angle)
+                # print(f"index_dir: angle={index_dir_angle:.1f}°, label={index_dir_label}")
+
+                # Compute thumb direction angle using TIP - IP
+                thumb_dir_x = thumb_tip.x - thumb_ip.x
+                thumb_dir_y = thumb_tip.y - thumb_ip.y
+                thumb_dir_angle = math.degrees(math.atan2(thumb_dir_y, thumb_dir_x))
+                print(f"thumb_dir: angle={thumb_dir_angle:.1f}°")
+                # Desired range for thumb angle
+                # Thumb angle must be between -60 and -10 degrees
+                thumb_angle_ok = (-60 <= thumb_dir_angle <= -10)
+
                 # Show distance between thumb tip and index tip (normalized 0-1)
                 dx_ti = thumb_tip.x - index_tip.x
                 dy_ti = thumb_tip.y - index_tip.y
@@ -395,7 +423,7 @@ while cap.isOpened():
                     cosang = max(-1.0, min(1.0, dot / (norm_i * norm_t)))
                     angle_deg = math.degrees(math.acos(cosang))
                     # Angle not strictly required for crossing; allow wide range
-                    angle_ok = 5 <= angle_deg <= 100
+                    angle_ok = 15 <= angle_deg <= 100
                     # Display angle between index and thumb (degrees)
                     cv2.putText(frame, f"Thumb-Index Angle: {angle_deg:.1f} deg", (50, 440),
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 200, 0), 2)
@@ -406,7 +434,7 @@ while cap.isOpened():
                 tips_dist = math.hypot(tips_dx, tips_dy)
                 # Log distance between thumb and index tips
                 print(f"tips_dist={tips_dist:.4f}")
-                dist_ok = tips_dist < 0.2
+                dist_ok = tips_dist < 0.15
 
                 # Index above thumb (visual crossing with index on top)
                 index_above_thumb = index_tip.y < (thumb_tip.y - 0.005)
@@ -417,9 +445,13 @@ while cap.isOpened():
                 length_similar = abs(len_i - len_t) < 0.12
 
                 right_hand_heart_gesture = (
-                    index_extended and three_folded and thumb_horizontal and
+                    index_extended and three_folded and thumb_horizontal and thumb_angle_ok and
                     dist_ok and index_above_thumb and length_similar and angle_ok
                 )
+
+                # Ensure cooldown variables exist before logging
+                current_time = time.time()
+                in_cooldown = (current_time - last_action_time) < action_cooldown
 
                 # Debug print all conditions used for right_hand_heart_gesture
                 print(
@@ -428,6 +460,8 @@ while cap.isOpened():
                     f"index_above_thumb={index_above_thumb} len_i={norm_i:.3f} len_t={norm_t:.3f} "
                     f"length_similar={length_similar} angle={('NA' if angle_deg is None else f'{angle_deg:.1f}')} angle_ok={angle_ok}"
                 )
+                # Log app state flags affecting like action
+                print(f"[state] ok_gesture_used={ok_gesture_used} tiktok_closed_by_gesture={tiktok_closed_by_gesture} in_cooldown={in_cooldown} thumb_angle_ok={thumb_angle_ok}")
              
 
                 # Check OK gesture (thumb and index finger forming a circle)
