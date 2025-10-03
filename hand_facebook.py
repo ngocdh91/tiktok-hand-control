@@ -16,12 +16,12 @@ screen_width, screen_height = pyautogui.size()
 prev_x, prev_y = None, None
 prev_action = None
 last_action_time = 0
-action_cooldown = 0.3  # 0.3 second delay between actions
+action_cooldown = 0.1  # Reduced delay between actions for smoother response
 last_gesture_state = None  # Previous gesture state
 gesture_start_y = None  # Initial Y position when gesture starts
 gesture_start_time = None  # Initial time when gesture starts
-gesture_threshold = 0.02  # Minimum movement threshold
-gesture_time_threshold = 0.1  # Minimum time to recognize gesture
+gesture_threshold = 0.01  # Reduced threshold for more sensitive movement detection
+gesture_time_threshold = 0.05  # Reduced time threshold for quicker gesture recognition
 
 while cap.isOpened():
     ret, frame = cap.read()
@@ -39,24 +39,19 @@ while cap.isOpened():
         for hand_landmarks in result.multi_hand_landmarks:
             mp_drawing.draw_landmarks(frame, hand_landmarks, mp_hands.HAND_CONNECTIONS)
             
-            # Detect left/right hand
+            # Only process right hand gestures
             hand_label = "Unknown"
             if result.multi_handedness:
                 for idx, handedness in enumerate(result.multi_handedness):
                     if idx < len(result.multi_hand_landmarks):
-                        hand_label = handedness.classification[0].label
-                        confidence = handedness.classification[0].score
-                        break
+                        if handedness.classification[0].label == "Right":
+                            hand_label = "Right"
+                            break
             
-            # Display hand information
-            cv2.putText(frame, f"Hand: {hand_label}", (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
-            
-            # Get wrist position (for tracking movement)
-            wrist = hand_landmarks.landmark[mp_hands.HandLandmark.WRIST]
-            x, y = wrist.x, wrist.y  # Normalized to image size
-            
-            # Only process gestures when right hand is detected
             if hand_label == "Right":
+                # Get wrist position (for tracking movement)
+                wrist = hand_landmarks.landmark[mp_hands.HandLandmark.WRIST]
+                x, y = wrist.x, wrist.y  # Normalized to image size
                 # Get finger positions
                 landmarks = hand_landmarks.landmark
                 fingers = {
@@ -107,12 +102,35 @@ while cap.isOpened():
                         delta_y_from_start = y - gesture_start_y
                         time_elapsed = current_time - gesture_start_time
                         
-                        # Only recognize gesture after moving far enough and long enough
+                        # Enhanced smooth scrolling with dynamic updates
+                        base_multiplier = 30  # Increased base scroll amount per step
                         if abs(delta_y_from_start) > gesture_threshold and time_elapsed > gesture_time_threshold:
-                            if delta_y_from_start < -gesture_threshold:  # Move up from initial position
-                                current_action = "page_down"
-                            elif delta_y_from_start > gesture_threshold:  # Move down from initial position
-                                current_action = "page_up"
+                            # Calculate scroll direction and intensity with enhanced sensitivity
+                            scroll_intensity = abs(delta_y_from_start) * 15  # Increased scaling factor
+                            scroll_direction = -1 if delta_y_from_start < 0 else 1  # Invert for natural feel
+                            
+                            # Calculate dynamic steps and amounts
+                            num_steps = min(int(scroll_intensity * 8), 20)  # Increased to maximum 20 steps per frame
+                            base_amount = max(int(base_multiplier * scroll_intensity), 8)  # Increased minimum amount
+                            
+                            # Calculate progressive scroll amounts for each step
+                            scroll_steps = []
+                            for step in range(num_steps):
+                                # Progressive intensity - stronger in the middle of the gesture
+                                step_intensity = 1.0 + abs(step - num_steps/2) / (num_steps/2)
+                                step_amount = int(base_amount * step_intensity) * scroll_direction
+                                scroll_steps.append(step_amount)
+                            
+                            # Create a sequence of dynamic scrolls
+                            current_action = ("smooth_scroll", {
+                                "steps": scroll_steps,
+                                "start_y": y,  # Store current Y for continuous tracking
+                                "base_amount": base_amount,
+                                "direction": scroll_direction
+                            })
+                            
+                            # Debug info
+                            print(f"Steps: {num_steps}, Base amount: {base_amount}, Direction: {scroll_direction}")
                         else:
                             current_action = None
                     
@@ -148,27 +166,49 @@ while cap.isOpened():
                     current_action != last_gesture_state and 
                     (current_time - last_action_time) > action_cooldown):
                     
-                    if current_action == "page_down":
-                        # pyautogui.press('pagedown')
-                        pyautogui.scroll(-20)
-                        cv2.putText(frame, "Page Down + Scroll -200", (50, 150), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 165, 0), 3)
-                        last_action_time = current_time
-                    elif current_action == "page_up":
-                        # pyautogui.press('pageup')
-                        pyautogui.scroll(20)
-                        cv2.putText(frame, "Page Up + Scroll 200", (50, 150), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 255), 3)
-                        last_action_time = current_time
+                    if isinstance(current_action, tuple) and current_action[0] == "smooth_scroll":
+                        scroll_params = current_action[1]
+                        scroll_steps = scroll_params["steps"]
+                        start_y = scroll_params["start_y"]
+                        base_amount = scroll_params["base_amount"]
+                        initial_direction = scroll_params["direction"]
+                        
+                        # Execute dynamic scrolling with continuous tracking
+                        total_amount = 0
+                        current_y = y  # Get current hand position
+                        
+                        for step_amount in scroll_steps:
+                            # Check for direction change during scroll
+                            current_delta = current_y - start_y
+                            if abs(current_delta) > gesture_threshold:
+                                # Update direction based on current hand position
+                                current_direction = -1 if current_delta < 0 else 1
+                                if current_direction != initial_direction:
+                                    # Adjust step amount if direction changed
+                                    step_amount = -step_amount
+                            
+                            # Execute scroll with dynamic amount
+                            adjusted_amount = int(step_amount * (1 + abs(current_delta) * 2))
+                            pyautogui.scroll(adjusted_amount)
+                            total_amount += adjusted_amount
+                            
+                            # Small delay for smoother scrolling
+                            time.sleep(0.005)
+                        
+                        # Visual feedback with enhanced information
+                        direction = "Up" if total_amount > 0 else "Down"
+                        intensity = "Strong" if abs(total_amount) > base_amount * len(scroll_steps) else "Normal"
+                        cv2.putText(frame, f"{intensity} {direction} Scroll: {len(scroll_steps)} steps", (50, 150), 
+                                  cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 165, 0), 3)
+                        
+                        # Minimal cooldown for continuous scrolling
+                        last_action_time = current_time - (action_cooldown * 0.8)  # Reduced cooldown further
                 
                 # Update gesture state
                 last_gesture_state = current_action
-            else:
-                # If not right hand, display message and reset state
-                cv2.putText(frame, "Please use RIGHT hand", (50, 200), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
-                prev_action = None
-
-            # Update hand position (for both right and left hands)
-            prev_y = y
-            prev_x = x
+                # Update hand position (only for right hand)
+                prev_y = y
+                prev_x = x
 
     else:
         prev_action = None  # If no hand detected, stop all actions
